@@ -51,7 +51,7 @@
       <label>Gold machine Lv.<input type="number" id="g_gold" min="0" max="30"></label>
       <label>Door Lv.<input type="number" id="g_door" min="0" max="20"></label>
       <label>Turret Lv.<input type="number" id="g_tur" min="0" max="20"></label>
-      <label>Beam width<input type="number" id="beam" min="5" max="200"></label>
+      <label title="Search quality: higher = more build orders explored, slower. Range 5-2000 (2000 = maximum).">Beam width (5-2000)<input type="number" id="beam" min="5" max="2000"></label>
       <label>Start delay (s)<input type="number" id="delay" min="0" max="120"></label>
       <label class="check"><input type="checkbox" id="onedec">max 1 decompose / second</label>
       <label class="check"><input type="checkbox" id="engineer">engineer? (buyback upgrade)</label>
@@ -146,7 +146,9 @@ function controlsToCfg() {
   const cnt = +$("g_cnt").value, lv = +$("g_cash").value;
   cfg.goal = {cash_machines: [0, 1, 2, 3, 4].map(i => i < cnt ? lv : 0), gold_machine: +$("g_gold").value || null,
               door: +$("g_door").value || null, turret: +$("g_tur").value || null};
-  cfg.search = Object.assign({}, cfg.search, {beam_width: +$("beam").value || 30});
+  const bw = Math.max(5, Math.min(Math.trunc(+$("beam").value || 30), 2000));
+  $("beam").value = bw;
+  cfg.search = Object.assign({}, cfg.search, {beam_width: bw});
   $("cfgtext").value = JSON.stringify(cfg, null, 2);
 }
 $("applycfg").onclick = () => { try { cfg = JSON.parse($("cfgtext").value); cfgToControls(); } catch (e) { alert(e.message); } };

@@ -426,7 +426,7 @@ function beam(D, cfg, TL, s0, goal, gv, width, H, useRollout) {
 function normalizeConfig(cfg) {
   cfg = JSON.parse(JSON.stringify(cfg || {}));
   const sc = cfg.search || {};
-  sc.beam_width = Math.max(5, Math.min(Math.trunc(+sc.beam_width || 30), 200));
+  sc.beam_width = Math.max(5, Math.min(Math.trunc(+sc.beam_width || 30), 2000));
   sc.gold_values = (sc.gold_values && sc.gold_values.length ? sc.gold_values : [10, 20, 40]).map(Number).slice(0, 3);
   cfg.search = sc;
   cfg.start_delay_seconds = Math.max(0, Math.min(Math.trunc(+cfg.start_delay_seconds || 0), 120));
