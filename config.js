@@ -92,12 +92,16 @@ const BREAKDOOR_CONFIG = {
    }
   ]
  },
+ "gems": {
+  "gold_efficiency": 0
+ },
  "events": [],
  "_notes": {
+  "gems": "gold_efficiency: % boost to the gold machine's generation only (not engineer/turret/drops). 0 = none",
+  "drops": "One-time cash/gold at elapsed minute (timer shows 20 - minute). Amount x (1 + 0.1 x dead_people) x multiplier (0 disables it, 2 = twice)",
   "goal": "Rush: reach this as fast as possible. Set any of: cash_machines (5 target levels, 0 = not needed), gold_machine, door, turret. null = no requirement",
   "start_delay_seconds": "The game always lasts 20:00 on the countdown timer; the delay adds extra seconds before it (e.g. 8 = starts at 20:08). Everything runs normally during the delay",
   "one_decompose_per_second": "true = at most one decompose per 1-second tick",
-  "drops": "One-time cash/gold at elapsed minute (timer shows 20 - minute). 'multiplier' scales that drop (0 disables it, 2 = twice)",
   "events": "Examples: {\"minute\": 5, \"type\": \"add_cash\", \"amount\": 500} | {\"minute\": 8, \"second\": 30, \"type\": \"add_gold\", \"amount\": 50} | {\"minute\": 10, \"type\": \"income_multiplier\", \"duration_minutes\": 2, \"cash\": 2.0, \"gold\": 1.0}"
  }
 };
