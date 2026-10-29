@@ -383,8 +383,17 @@ function rollout(D, cfg, TL, s0, goal, gv, H) {
   return goal.met(s) ? s.t : H + 1;
 }
 
+const yieldToUI = () => new Promise(res => setTimeout(res, 0));
+let lastYield = 0;
+/** Lets the page repaint and handle input when the planner runs on the main thread (no Web Worker). */
+async function maybeYield() {
+  if (Date.now() - lastYield < 40) return;
+  await yieldToUI();
+  lastYield = Date.now();
+}
+
 // ---- beam search
-function beam(D, cfg, TL, s0, goal, gv, width, H, useRollout) {
+async function beam(D, cfg, TL, s0, goal, gv, width, H, useRollout) {
   const heuristic = s => {
     const [cr, gr] = rates(D, s, s.bb < FAR ? s.bb : undefined);
     if (useRollout) return rollout(D, cfg, TL, s, goal, gv, H);
@@ -397,6 +406,7 @@ function beam(D, cfg, TL, s0, goal, gv, width, H, useRollout) {
   while (layer.length) {
     const nxt = new Map();
     for (const node of layer) {
+      await maybeYield();
       const s = node.s;
       for (const [kind, idx, label, [C, G]] of candidates(D, s, cfg)) {
         const variants = [], s2 = copyState(s), t1 = waitFor(D, s2, TL, C, G, false, H) ? s2.t : null;
@@ -444,14 +454,70 @@ function normalizeConfig(cfg) {
 const entryOrder = (a, b) => a[0].t - b[0].t || ((a[0].type === "event" ? 0 : 1) - (b[0].type === "event" ? 0 : 1)) || a[1] - b[1];
 const sortEntries = es => es.map((e, i) => [e, i]).sort(entryOrder).map(x => x[0]);
 
-function plan(D, cfgIn) {
-  const cfg = normalizeConfig(cfgIn), TL = new Timeline(cfg), s0 = makeState(cfg), H = HORIZON;
-  const goal = new Goal(D, cfg.goal), sc = cfg.search, width = sc.beam_width, gvs = sc.gold_values;
-  const results = [...new Set([...gvs, 5, 100])].sort((a, b) => a - b).map(gv => beam(D, cfg, TL, s0, goal, gv, width * 2, H, false));
-  if (sc.rollout !== false) for (const gv of gvs) results.push(beam(D, cfg, TL, s0, goal, gv, width, H, true));
+let reportProgress = () => {};  // set by plan(); lets the caller show what the planner is doing
+
+/** Every beam variant (plain beams at 2x width, then rollout beams). With anyHit, stops at the first beam that
+    reaches the goal - only for yes/no feasibility probes, where which route wins doesn't matter. */
+async function searchAll(D, cfg, TL, s0, goal, width = cfg.search.beam_width, anyHit = false, label = "Searching") {
+  const gvs = cfg.search.gold_values, results = [];
+  const runs = [...[...new Set([...gvs, 5, 100])].sort((a, b) => a - b).map(gv => [gv, false, width * 2])];
+  if (cfg.search.rollout !== false) for (const gv of gvs) runs.push([gv, true, width]);
+  for (let i = 0; i < runs.length; i++) {
+    if (anyHit && results.some(r => r.reached !== null)) break;
+    const [gv, ro, w] = runs[i];
+    reportProgress(`${label} (width ${width}, search ${i + 1}/${runs.length})`);
+    await yieldToUI();
+    results.push(await beam(D, cfg, TL, s0, goal, gv, w, HORIZON, ro));
+  }
+  return results;
+}
+
+const bestReached = results => {
   const reached = results.filter(r => r.reached !== null);
-  const r = reached.length ? reached.reduce((a, b) => b.reached < a.reached ? b : a)
-                           : results.reduce((a, b) => b.h < a.h ? b : a);
+  return reached.length ? reached.reduce((a, b) => b.reached < a.reached ? b : a) : null;
+};
+
+/** The goal with every target level scaled to k/RELAX_STEPS (rounded down). */
+const RELAX_STEPS = 20;
+function scaledGoal(goal, k) {
+  const f = x => Math.floor((x || 0) * k / RELAX_STEPS);
+  return {cash_machines: (goal.cash_machines || []).map(f), gold_machine: f(goal.gold_machine),
+          door: f(goal.door), turret: f(goal.turret)};
+}
+
+const WIDEN_TARGET_MS = 15000, MAX_BEAM = 2000;
+
+async function plan(D, cfgIn, progress) {
+  reportProgress = progress || (() => {});
+  const cfg = normalizeConfig(cfgIn), TL = new Timeline(cfg), s0 = makeState(cfg), H = HORIZON;
+  const w0 = cfg.search.beam_width, tStart = Date.now();
+  let goal = new Goal(D, cfg.goal), results = await searchAll(D, cfg, TL, s0, goal), r = bestReached(results), relaxed = null, widened = null, wUsed = w0;
+  // A narrow beam can prune the only winning route of a tight goal. Search time grows roughly linearly with the
+  // width, so do one wider full search (same variants, rollouts included) sized from the measured time.
+  if (!r && w0 < MAX_BEAM) {
+    let w = Math.min(MAX_BEAM, Math.floor(w0 * WIDEN_TARGET_MS / Math.max(Date.now() - tStart, 1)));
+    if (w < w0 * 1.5) w = 0;
+    // The time-based guess can land just short of the width a tight goal needs, so allow one doubling on a miss.
+    for (let step = 0; step < 2 && !r && w >= w0 * 1.5; step++, w = Math.min(MAX_BEAM, w * 2)) {
+      results = await searchAll(D, cfg, TL, s0, goal, w, false, "Goal missed, widening beam"); r = bestReached(results); wUsed = w;
+      if (r) widened = w;
+      if (w >= MAX_BEAM) break;
+    }
+  }
+  if (!r) {
+    // Still unreachable: a route that merely minimises the leftover cost is arbitrary (it hoards gold and idles),
+    // so instead plan for the largest scaled-down goal that is reachable, at the widest width tried.
+    let lo = 0, hi = RELAX_STEPS - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (bestReached(await searchAll(D, cfg, TL, s0, new Goal(D, scaledGoal(cfg.goal, mid)), wUsed, true, `Goal unreachable, testing ${Math.round(100 * mid / RELAX_STEPS)}% of it`))) lo = mid; else hi = mid - 1;
+    }
+    if (lo > 0) {
+      const rg = scaledGoal(cfg.goal, lo), g2 = new Goal(D, rg), r2 = bestReached(await searchAll(D, cfg, TL, s0, g2, wUsed, false, `Planning the ${Math.round(100 * lo / RELAX_STEPS)}% goal`));
+      if (r2) { r = r2; goal = g2; relaxed = {goal: rg, percent: Math.round(100 * lo / RELAX_STEPS)}; }
+    }
+  }
+  if (!r) r = results.reduce((a, b) => b.h < a.h ? b : a);
   const chain = [];
   for (let n = r.node; n; n = n.parent) chain.push(n);
   const route = chain.reverse().flatMap(n => n.entries);
@@ -460,7 +526,8 @@ function plan(D, cfgIn) {
   for (const e of [...route])
     if (e.type === "buy" && e.text.startsWith("Buyback") && e.t + BUYBACK_DELAY <= endT)
       route.push({t: e.t + BUYBACK_DELAY, type: "event", text: "Buyback upgrade is now active"});
-  return {route: sortEntries(route), reached: r.reached, goal_met: r.reached !== null, final: stateToDict(r.node.s), horizon_seconds: H};
+  const widenedBeam = r.reached !== null && !relaxed ? widened : null;
+  return {route: sortEntries(route), reached: r.reached, goal_met: r.reached !== null && !relaxed, relaxed, widened_beam: widenedBeam, final: stateToDict(r.node.s), horizon_seconds: H};
 }
 
 // ---- manual mode

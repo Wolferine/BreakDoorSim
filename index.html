@@ -107,12 +107,15 @@ const clone = o => JSON.parse(JSON.stringify(o));
 let cfg = clone(BREAKDOOR_CONFIG), view = null;
 
 // Runs the planner in a Web Worker; falls back to the main thread (e.g. when opened from file://).
-function runPlan(c) {
-  const fallback = () => new Promise(res => setTimeout(() => { try { res({result: plan(D, c)}); } catch (e) { res({error: e.message}); } }, 30));
+function runPlan(c, onProgress) {
+  const fallback = async () => { try { return {result: await plan(D, c, onProgress)}; } catch (e) { return {error: e.message}; } };
   return new Promise(resolve => {
     let w;
     try { w = new Worker("worker.js"); } catch (e) { return resolve(fallback()); }
-    w.onmessage = e => { w.terminate(); resolve(e.data); };
+    w.onmessage = e => {
+      if (e.data.progress !== undefined) { if (onProgress) onProgress(e.data.progress); return; }
+      w.terminate(); resolve(e.data);
+    };
     w.onerror = () => { w.terminate(); resolve(fallback()); };
     w.postMessage({data: BREAKDOOR_DATA, cfg: c});
   });
@@ -186,17 +189,34 @@ function drawChart(route) {
 
 function showResult(r, secs) {
   const f = r.final;
-  const head = r.goal_met ? `<b class="good">Goal reached at ${mmss(r.reached)}</b>` : `<b class="bad">Goal not reachable before 0:00 - best partial route shown</b>`;
-  $("summary").innerHTML = `${head} <span class="muted">(planned in ${secs.toFixed(1)}s)</span><br>End ${mmss(f.t)}: cash $${fmt(f.cash)}, gold ${fmt(f.gold)} - cash machines [${f.cash_levels.join(", ")}], gold machine Lv.${f.gold_level}, door Lv.${f.door}, turret Lv.${f.turret}`;
+  const g = r.relaxed && r.relaxed.goal, rel = g ? `door ${g.door}, turret ${g.turret}, gold machine ${g.gold_machine}, cash machines [${g.cash_machines.join(", ")}]` : "";
+  const head = r.goal_met ? `<b class="good">Goal reached at ${mmss(r.reached)}</b>`
+    : r.relaxed ? `<b class="bad">Goal not reachable before 0:00</b> - showing the fastest route to ${r.relaxed.percent}% of it (${rel}), reached at ${mmss(r.reached)}`
+    : `<b class="bad">Goal not reachable before 0:00 - best partial route shown</b>`;
+  const note = r.widened_beam ? `<br><span class="muted">Beam width raised to ${r.widened_beam} automatically (the entered width missed the goal); the setting was updated.</span>` : "";
+  $("summary").innerHTML = `${head} <span class="muted">(planned in ${secs.toFixed(1)}s)</span>${note}<br>End ${mmss(f.t)}: cash $${fmt(f.cash)}, gold ${fmt(f.gold)} - cash machines [${f.cash_levels.join(", ")}], gold machine Lv.${f.gold_level}, door Lv.${f.door}, turret Lv.${f.turret}`;
   $("route").innerHTML = HEAD + r.route.map(rowHTML).join("");
   drawChart(r.route);
 }
 $("run").onclick = async () => {
-  controlsToCfg(); $("run").disabled = true; $("run").textContent = "Running...";
+  controlsToCfg(); $("run").disabled = true;
   const t0 = performance.now();
-  const r = await runPlan(cfg);
+  let phase = "Starting";
+  const show = () => {
+    const s = Math.floor((performance.now() - t0) / 1000);
+    $("run").textContent = `Running... ${s}s`;
+    $("summary").innerHTML = `<span class="muted">Planning... ${s}s elapsed - ${phase}</span>`;
+  };
+  show();
+  const timer = setInterval(show, 250);
+  const r = await runPlan(cfg, text => { phase = text; });
+  clearInterval(timer);
   $("run").disabled = false; $("run").textContent = "Run";
-  if (r.error) $("summary").innerHTML = `<span class="bad">${r.error}</span>`; else showResult(r.result, (performance.now() - t0) / 1000);
+  if (r.error) $("summary").innerHTML = `<span class="bad">${r.error}</span>`;
+  else {
+    if (r.result.widened_beam) { $("beam").value = r.result.widened_beam; controlsToCfg(); }
+    showResult(r.result, (performance.now() - t0) / 1000);
+  }
 };
 
 // ---- manual mode
