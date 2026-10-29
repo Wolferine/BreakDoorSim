@@ -54,7 +54,7 @@ const stateFromDict = d => ({t: Math.trunc(d.t), cash: +d.cash, gold: +d.gold, c
 
 /** Income per second for tick `at` (default: the current tick). */
 function rates(D, s, at) {
-  let c = 0, g = s.gl ? D.gold[s.gl].gold : 0;
+  let c = 0, g = s.gl ? D.gold[s.gl].gold * (1 + (D.goldBoost || 0)) : 0;
   for (const l of s.cl) if (l) c += D.cash[l].cash;
   if (s.bb <= (at === undefined ? s.t : at)) for (const l of s.cl) g += BUYBACK_GOLD[l] || 0;
   if (s.tu) { c += D.turret[s.tu].cash; g += D.turret[s.tu].gold; }
@@ -69,7 +69,7 @@ class Timeline {
     const drops = cfg.drops || {};
     if (drops.enabled !== false) {
       for (const d of drops.table || []) {
-        const m = +(d.multiplier ?? 1), cash = +(d.cash || 0) * m, gold = +(d.gold || 0) * m;
+        const m = +(d.multiplier ?? 1) * (1 + 0.1 * +(d.dead_people || 0)), cash = +(d.cash || 0) * m, gold = +(d.gold || 0) * m;
         if (cash || gold) add(Math.trunc(d.minute * 60), {type: "drop", minute: d.minute, cash, gold});
       }
     }
@@ -359,7 +359,7 @@ function rollout(D, cfg, TL, s0, goal, gv, H) {
     }
     if (s.gl < D.maxGold) {
       const n = D.gold[s.gl + 1], old = s.gl ? D.gold[s.gl].gold : 0;
-      offer("gold_up", 0, n.cost[0], n.cost[1], (n.gold - old) * gv, n.door);
+      offer("gold_up", 0, n.cost[0], n.cost[1], (n.gold - old) * (1 + (D.goldBoost || 0)) * gv, n.door);
     }
     if (cfg.use_turret !== false && s.tu < Math.min(goal.turret, D.maxTurret)) {
       const n = D.turret[s.tu + 1], old = s.tu ? D.turret[s.tu] : {cash: 0, gold: 0};
@@ -445,8 +445,10 @@ function normalizeConfig(cfg) {
   const dr = cfg.drops || {};
   dr.table = (dr.table || []).slice(0, 50).map(d => ({
     minute: Math.max(0, Math.min(+d.minute || 0, 20)), cash: +d.cash || 0, gold: +d.gold || 0,
+    dead_people: Math.max(0, Math.min(+d.dead_people || 0, 1000)),
     multiplier: Math.max(0, Math.min(d.multiplier === undefined || d.multiplier === "" ? 1 : +d.multiplier || 0, 1000))}));
   cfg.drops = dr;
+  cfg.gems = Object.assign({}, cfg.gems, {gold_efficiency: Math.max(-100, Math.min(+(cfg.gems || {}).gold_efficiency || 0, 100000))});
   cfg.events = (cfg.events || []).slice(0, 50);
   return cfg;
 }
@@ -490,6 +492,7 @@ const WIDEN_TARGET_MS = 15000, MAX_BEAM = 2000;
 async function plan(D, cfgIn, progress) {
   reportProgress = progress || (() => {});
   const cfg = normalizeConfig(cfgIn), TL = new Timeline(cfg), s0 = makeState(cfg), H = HORIZON;
+  D.goldBoost = cfg.gems.gold_efficiency / 100;
   const w0 = cfg.search.beam_width, tStart = Date.now();
   let goal = new Goal(D, cfg.goal), results = await searchAll(D, cfg, TL, s0, goal), r = bestReached(results), relaxed = null, widened = null, wUsed = w0;
   // A narrow beam can prune the only winning route of a tight goal. Search time grows roughly linearly with the
@@ -533,6 +536,7 @@ async function plan(D, cfgIn, progress) {
 // ---- manual mode
 function manualView(D, cfgIn, s) {
   const cfg = normalizeConfig(cfgIn), TL = new Timeline(cfg), acts = [];
+  D.goldBoost = cfg.gems.gold_efficiency / 100;
   for (let i = 0; i < NUM_CASH; i++) {
     if (s.cl[i] > 0) acts.push(["cash_up", i]);
     else if (s.cl[i] === 0 && (i === 0 || s.cl[i - 1] > 0)) acts.push(["cash_unlock", i]);
@@ -557,6 +561,7 @@ function manualView(D, cfgIn, s) {
 /** Returns {state, entries, error}. */
 function manualAct(D, cfgIn, sd, action) {
   const cfg = normalizeConfig(cfgIn), s = stateFromDict(sd), TL = new Timeline(cfg), t0 = s.t;
+  D.goldBoost = cfg.gems.gold_efficiency / 100;
   let entries = [];
   const fail = error => ({state: s, entries, error});
   const type = action.type;

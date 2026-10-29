@@ -64,6 +64,10 @@
       <label class="check"><input type="checkbox" id="dropson">drops enabled</label>
       <table id="drops"></table>
     </details>
+    <details><summary>Gems</summary>
+      <label>Gold efficiency %<input type="number" id="gem_gold" step="any" value="0"></label>
+      <span class="muted">Boosts the gold machine's generation only.</span>
+    </details>
     <details><summary>Advanced: full config JSON (start state, events, ...)</summary>
       <textarea id="cfgtext"></textarea>
       <button class="act" id="applycfg">Apply JSON to controls</button>
@@ -129,8 +133,8 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
 function renderDrops() {
   const d = (cfg.drops && cfg.drops.table) || [];
   const cell = (i, k, v) => `<td><input type="number" step="any" min="0" data-i="${i}" data-k="${k}" value="${v}"></td>`;
-  $("drops").innerHTML = "<tr><th>Minute (elapsed)</th><th>Timer shows</th><th>Cash</th><th>Gold</th><th>Multiplier</th></tr>" +
-    d.map((r, i) => `<tr>${cell(i, "minute", r.minute)}<td>${mmss(r.minute * 60)}</td>${cell(i, "cash", r.cash)}${cell(i, "gold", r.gold)}${cell(i, "multiplier", r.multiplier)}</tr>`).join("");
+  $("drops").innerHTML = "<tr><th>Minute (elapsed)</th><th>Timer shows</th><th>Cash</th><th>Gold</th>  <th>Dead people (+10% each)</th><th>Multiplier</th></tr>" +
+      d.map((r, i) => `<tr>${cell(i, "minute", r.minute)}<td>${mmss(r.minute * 60)}</td>${cell(i, "cash", r.cash)}${cell(i, "gold", r.gold)}${cell(i, "dead_people", r.dead_people || 0)}${cell(i, "multiplier", r.multiplier)}</tr>`).join("");
   $("drops").querySelectorAll("input").forEach(inp => inp.onchange = () => {
     cfg.drops.table[+inp.dataset.i][inp.dataset.k] = +inp.value; controlsToCfg(); renderDrops();
   });
@@ -142,12 +146,14 @@ function cfgToControls() {
   $("beam").value = (cfg.search || {}).beam_width || 30;
   $("delay").value = cfg.start_delay_seconds || 0; $("onedec").checked = !!cfg.one_decompose_per_second; $("engineer").checked = !!cfg.engineer;
   $("dropson").checked = !cfg.drops || cfg.drops.enabled !== false; renderDrops();
+  $("gem_gold").value = (cfg.gems || {}).gold_efficiency || 0;
   $("cfgtext").value = JSON.stringify(cfg, null, 2);
 }
 function controlsToCfg() {
   cfg.start_delay_seconds = Math.max(0, +$("delay").value || 0);
   cfg.one_decompose_per_second = $("onedec").checked; cfg.engineer = $("engineer").checked;
   cfg.drops = Object.assign({table: []}, cfg.drops, {enabled: $("dropson").checked});
+  cfg.gems = Object.assign({}, cfg.gems, {gold_efficiency: +$("gem_gold").value || 0});
   const cnt = +$("g_cnt").value, lv = +$("g_cash").value;
   cfg.goal = {cash_machines: [0, 1, 2, 3, 4].map(i => i < cnt ? lv : 0), gold_machine: +$("g_gold").value || null,
               door: +$("g_door").value || null, turret: +$("g_tur").value || null};
@@ -158,7 +164,7 @@ function controlsToCfg() {
 }
 $("applycfg").onclick = () => { try { cfg = JSON.parse($("cfgtext").value); cfgToControls(); } catch (e) { alert(e.message); } };
 $("reset").onclick = () => { cfg = clone(BREAKDOOR_CONFIG); cfgToControls(); };
-["g_cash", "g_cnt", "g_gold", "g_door", "g_tur", "beam", "delay", "onedec", "engineer", "dropson"].forEach(id => $(id).onchange = controlsToCfg);
+["g_cash", "g_cnt", "g_gold", "g_door", "g_tur", "beam", "delay", "onedec", "engineer", "dropson", "gem_gold"].forEach(id => $(id).onchange = controlsToCfg);
 
 function rowHTML(e) {
   if (e.type === "event") return `<tr class="event"><td>${mmss(e.t)}</td><td colspan="5">${e.text}</td></tr>`;
