@@ -1,5 +1,5 @@
 // Default settings (edit directly)
-const BLOXY_CONFIG = {
+const BREAKDOOR_CONFIG = {
  "goal": {
   "cash_machines": [
    12,

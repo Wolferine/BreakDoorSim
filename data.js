@@ -1,5 +1,5 @@
 // Game stat tables (edit directly)
-const BLOXY_DATA = {
+const BREAKDOOR_DATA = {
  "_info": "Units: cash/gold per second for income, absolute amounts for costs. door_required = minimum door level.",
  "cash_machine": [
   {

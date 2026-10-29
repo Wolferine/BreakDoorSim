@@ -1,4 +1,4 @@
-# Bloxy build simulator
+# BreakDoor build simulator
 
 Plans the fastest route to a goal (default: 5 cash machines at Lv.12) and offers a manual mode.
 The game timer always counts down from 20:00; the start delay adds extra seconds.
