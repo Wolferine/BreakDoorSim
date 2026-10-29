@@ -12,7 +12,7 @@ const BLOXY_CONFIG = {
   "door": null,
   "turret": null
  },
- "start_delay_seconds": 8,
+ "start_delay_seconds": 15,
  "one_decompose_per_second": true,
  "engineer": false,
  "start": {
@@ -31,7 +31,7 @@ const BLOXY_CONFIG = {
  },
  "use_turret": true,
  "search": {
-  "beam_width": 30,
+  "beam_width": 150,
   "gold_values": [
    10,
    20,
