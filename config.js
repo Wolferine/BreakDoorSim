@@ -50,44 +50,44 @@ const BREAKDOOR_CONFIG = {
    },
    {
     "minute": 3,
-    "cash": 300,
-    "gold": 20,
+    "cash": 450,
+    "gold": 15,
     "multiplier": 1
    },
    {
     "minute": 5,
-    "cash": 0,
-    "gold": 100,
+    "cash": 600,
+    "gold": 50,
     "multiplier": 1
    },
    {
     "minute": 7,
-    "cash": 0,
-    "gold": 150,
+    "cash": 1000,
+    "gold": 100,
     "multiplier": 1
    },
    {
     "minute": 9,
-    "cash": 0,
+    "cash": 5000,
     "gold": 200,
     "multiplier": 1
    },
    {
     "minute": 11,
-    "cash": 0,
-    "gold": 250,
+    "cash": 10000,
+    "gold": 300,
     "multiplier": 1
    },
    {
     "minute": 13,
-    "cash": 0,
-    "gold": 400,
+    "cash": 20000,
+    "gold": 450,
     "multiplier": 1
    },
    {
     "minute": 15,
-    "cash": 0,
-    "gold": 500,
+    "cash": 30000,
+    "gold": 600,
     "multiplier": 1
    }
   ]
