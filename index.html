@@ -33,6 +33,9 @@
   .grid button { text-align: left; padding: 8px; border-radius: 4px; border: 1px solid #333b47; background: #14171c; color: #dfe3ea; cursor: pointer; }
   .grid button.ok { border-color: #3f9e5a; } .grid button.dec { border-color: #e0b252; }
   .grid button:disabled { opacity: .45; cursor: default; } .grid small { display: block; color: #9aa4b2; }
+  tr.machine-cash td:nth-child(2) { color: #4da3ff; }
+  tr.machine-gold td:nth-child(2) { color: #ffd700; }
+  tr.machine-door td:nth-child(2) { color: #fff; }
   textarea { width: 100%; height: 240px; font-family: monospace; box-sizing: border-box; }
   #drops input { width: 90px; }
   details { margin-bottom: 10px; } summary { cursor: pointer; color: #9aa4b2; margin-bottom: 8px; }
@@ -168,7 +171,9 @@ $("reset").onclick = () => { cfg = clone(BREAKDOOR_CONFIG); cfgToControls(); };
 
 function rowHTML(e) {
   if (e.type === "event") return `<tr class="event"><td>${mmss(e.t)}</td><td colspan="5">${e.text}</td></tr>`;
-  return `<tr class="${e.type}"><td>${mmss(e.t)}</td><td>${e.text}</td><td class="n">$${fmt(e.cash)}</td><td class="n">${fmt(e.gold)}</td>` +
+  const machineClass = /\bCash Machine\b/.test(e.text) ? " machine-cash"
+    : (/\bGold Machine\b/.test(e.text) ? " machine-gold" : (/\bDoor Lv\./.test(e.text) ? " machine-door" : ""));
+  return `<tr class="${e.type}${machineClass}"><td>${mmss(e.t)}</td><td>${e.text}</td><td class="n">$${fmt(e.cash)}</td><td class="n">${fmt(e.gold)}</td>` +
     `<td class="n">$${fmt(e.cash_rate)}/s &nbsp; ${fmt(e.gold_rate)}G/s</td><td>[${e.cash_levels.join(",")}] G${e.gold_level} D${e.door} T${e.turret}</td></tr>`;
 }
 const HEAD = "<tr><th>Time</th><th>Action</th><th class='n'>Cash</th><th class='n'>Gold</th><th class='n'>Income</th><th>Levels</th></tr>";
